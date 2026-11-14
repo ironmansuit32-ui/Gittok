@@ -1,0 +1,45 @@
+name: Update feed
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    concurrency:
+      group: update-feed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python fetch.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - run: git config user.name "github-actions[bot]"
+        if: always()
+
+      - run: git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        if: always()
+
+      - run: git add repos.json cache.json
+        if: always()
+
+      - run: git diff --cached --quiet || git commit -m "Update feed"
+        if: always()
+
+      - run: git push
+        if: always()

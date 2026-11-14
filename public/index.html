@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gittok</title>
+  <style>
+    :root { --bg:#0d1117; --text:#e6edf3; --muted:#8b949e; --link:#58a6ff; --border:#30363d; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+    * { box-sizing:border-box; scrollbar-width:none; -ms-overflow-style:none; }
+    *::-webkit-scrollbar { display:none; }
+    #feed { height:100vh; height:100dvh; overflow-y:auto; scroll-snap-type:y mandatory; }
+    .repo { height:100vh; height:100dvh; scroll-snap-align:start; scroll-snap-stop:always; }
+    .strip { display:flex; height:100%; overflow-x:auto; scroll-snap-type:x mandatory; }
+    .slide { flex:0 0 100%; width:100%; scroll-snap-align:start; }
+    .info { padding:24px; display:flex; flex-direction:column; gap:14px; }
+    .category { align-self:flex-start; font-size:12px; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:4px 10px; }
+    h1 { margin:0; font-size:36px; line-height:1.15; font-weight:700; }
+    a { color:var(--link); text-decoration:none; word-break:break-all; }
+    p { margin:0; font-size:18px; line-height:1.6; }
+    .image { display:flex; align-items:center; justify-content:center; padding:16px; }
+    img { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; }
+  </style>
+</head>
+<body>
+  <main id="feed"></main>
+  <script>
+    const safe = (v) => typeof v === 'string' && v.startsWith('https://');
+    fetch('repos.json')
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((data) => {
+        const feed = document.getElementById('feed');
+        const repos = Array.isArray(data.repos) ? data.repos : [];
+        repos.forEach((repo) => {
+          const section = document.createElement('section');
+          section.className = 'repo';
+          const strip = document.createElement('div');
+          strip.className = 'strip';
+
+          const info = document.createElement('article');
+          info.className = 'slide info';
+          if (repo.category) {
+            const c = document.createElement('div');
+            c.className = 'category';
+            c.textContent = String(repo.category);
+            info.appendChild(c);
+          }
+          const title = document.createElement('h1');
+          title.textContent = String(repo.full_name || '');
+          info.appendChild(title);
+          if (safe(repo.url)) {
+            const link = document.createElement('a');
+            link.href = repo.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = repo.url.replace('https://', '');
+            info.appendChild(link);
+          }
+          const pitch = document.createElement('p');
+          pitch.textContent = String(repo.pitch || '');
+          info.appendChild(pitch);
+          strip.appendChild(info);
+
+          (Array.isArray(repo.images) ? repo.images : []).forEach((src) => {
+            if (!safe(src)) return;
+            const slide = document.createElement('article');
+            slide.className = 'slide image';
+            const img = document.createElement('img');
+            img.src = src;
+            img.alt = String(repo.full_name || 'repo image');
+            img.onerror = () => slide.remove();
+            slide.appendChild(img);
+            strip.appendChild(slide);
+          });
+
+          section.appendChild(strip);
+          feed.appendChild(section);
+        });
+      })
+      .catch(() => { document.body.textContent = 'Could not load repos.'; });
+  </script>
+</body>
+</html>

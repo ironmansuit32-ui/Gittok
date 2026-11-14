@@ -1,0 +1,37 @@
+{
+  "repos": [
+    {
+      "full_name": "acme/ship-fast",
+      "url": "https://github.com/acme/ship-fast",
+      "pitch": "AI agent that writes release notes and changelog drafts from pull requests.",
+      "category": "ai",
+      "images": ["https://picsum.photos/800/600"]
+    },
+    {
+      "full_name": "north/dev-journal",
+      "url": "https://github.com/north/dev-journal",
+      "pitch": "Daily coding log that summarizes commits and turns them into readable updates.",
+      "category": "productivity",
+      "images": []
+    },
+    {
+      "full_name": "pixel/sprint-board",
+      "url": "https://github.com/pixel/sprint-board",
+      "pitch": "Simple kanban board for planning weekly tasks with lightweight team sync.",
+      "images": ["https://picsum.photos/600/800"]
+    },
+    {
+      "full_name": "echo/bug-tracker-lite",
+      "url": "https://github.com/echo/bug-tracker-lite",
+      "pitch": "Minimal issue tracker focused on fast triage and clear ownership.",
+      "category": "tools"
+    },
+    {
+      "full_name": "orbit/snippet-vault",
+      "url": "https://github.com/orbit/snippet-vault",
+      "pitch": "Searchable snippet collection for reusable frontend and backend code patterns.",
+      "category": "dev",
+      "images": []
+    }
+  ]
+}

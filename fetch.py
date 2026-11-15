@@ -6,6 +6,7 @@ GROQ = "https://api.groq.com/openai/v1/chat/completions"
 BAD = ["awesome-", "tutorial", "leetcode", "interview", "cheatsheet", "dotfiles", "homework"]
 BAD_IMG = ["shields.io", "badge", "badgen", "travis-ci", "codecov", "coveralls", "sponsor", "buymeacoffee", "ko-fi", "/actions/"]
 OK = {"ai", "web", "mobile", "devtools", "cli", "games", "data", "security", "systems", "design", "other"}
+groq_stopped = False
 def load_json(path, default):
     if not os.path.exists(path):
         return default
@@ -88,9 +89,10 @@ def trim_readme(readme):
         keep.append(line)
     return "\n".join(keep)[:3000]
 def groq_call(key, full_name, desc, readme_text):
+    global groq_stopped
     msg = (
         "You write short factual descriptions of GitHub projects for a feed. Return ONLY a JSON object with exactly these keys:\n"
-        "\"pitch\": 1 to 2 sentences, max 200 characters, plainly stating what the project is and what it does. Facts only. No opinions and no marketing words such as cool, powerful, amazing, blazing fast, revolutionary, game-changing. Do not start with the repo name.\n"
+        "\"pitch\": 1 to 2 sentences, max 160 characters, plainly stating what the project is and what it does. Facts only. No opinions and no marketing words such as cool, powerful, amazing, blazing fast, revolutionary, game-changing. Do not start with the repo name.\n"
         "\"category\": exactly one of: ai, web, mobile, devtools, cli, games, data, security, systems, design, other.\n"
         "\"skip\": true if the project is a tutorial, a course, notes, a list of links, a copy of another project, spam, or too vague to describe. Otherwise false.\n\n"
         f"Repo: {full_name}\nDescription: {desc}\nREADME:\n{readme_text}"
@@ -110,9 +112,15 @@ def groq_call(key, full_name, desc, readme_text):
             r = requests.post(GROQ, headers=headers, json=body, timeout=60)
             if r.status_code == 429:
                 tries_429 += 1
-                if tries_429 >= 3:
+                try:
+                    wait = float(r.headers.get("retry-after"))
+                    pause = wait + 1
+                except (TypeError, ValueError):
+                    wait, pause = 20, 20
+                if tries_429 >= 5 or wait > 90:
+                    groq_stopped = True
                     return None
-                time.sleep(15)
+                time.sleep(pause)
                 continue
             if r.status_code >= 400:
                 return None
@@ -124,6 +132,26 @@ def groq_call(key, full_name, desc, readme_text):
             except Exception:
                 break
     return None
+def trim_pitch(pitch):
+    if len(pitch) <= 200:
+        return pitch
+    kept = ""
+    for sentence in re.findall(r"[^.!?]+[.!?]+", pitch):
+        candidate = (kept + " " + sentence.strip()).strip()
+        if len(candidate) > 200:
+            break
+        kept = candidate
+    if kept:
+        return kept
+    cut = pitch[:200]
+    if " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    else:
+        cut = cut[:197]
+    cut = cut.rstrip()
+    while len(cut) + 3 > 200 and " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    return cut + "..."
 def main():
     github_token = os.environ.get("GITHUB_TOKEN")
     groq_key = os.environ.get("GROQ_API_KEY")
@@ -166,32 +194,41 @@ def main():
                         cat = str(ai.get("category") or "other").lower()
                         if cat not in OK:
                             cat = "other"
-                        pitch = str(ai.get("pitch") or "").strip()[:200]
+                        pitch = trim_pitch(str(ai.get("pitch") or "").strip())
                         if cached and cached.get("images") is not None:
                             images = cached.get("images")
                         item = {"id": int(repo["id"]), "full_name": full_name, "url": f"https://github.com/{full_name}", "pitch": pitch, "category": cat, "images": images}
                         kept.append(item)
                         cache[rid], status = {"pitch": pitch, "category": cat, "images": images}, "kept"
-            if called_groq:
-                time.sleep(10)
+            if called_groq and not groq_stopped:
+                time.sleep(15)
         except Exception as e:
             status, reason = "failed", e.__class__.__name__
         finally:
             save_atomic("cache.json", cache)
             print(f"{i}/{len(repos)} {full_name} ... {status}{(' (' + reason + ')') if reason else ''}")
+        if groq_stopped:
+            break
         if limit is not None and len(kept) >= limit:
             break
-    random.shuffle(kept)
-    out = {"generated_at": datetime.now(timezone.utc).isoformat(), "repos": kept}
-    if limit is None and len(kept) < 20:
+    out_repos = []
+    for repo in repos:
+        cached = cache.get(str(repo.get("id")))
+        if not cached or cached.get("skip"):
+            continue
+        full_name = repo.get("full_name", "unknown/unknown")
+        out_repos.append({"id": int(repo["id"]), "full_name": full_name, "url": f"https://github.com/{full_name}", "pitch": str(cached.get("pitch") or "").strip(), "category": str(cached.get("category") or "other"), "images": cached.get("images") or []})
+    random.shuffle(out_repos)
+    out = {"generated_at": datetime.now(timezone.utc).isoformat(), "repos": out_repos}
+    if limit is None and len(out_repos) < 20:
         print("Warning: kept fewer than 20 repos; not overwriting repos.json")
     else:
         save_atomic("repos.json", out)
-    with_images = sum(1 for x in kept if x.get("images"))
+    with_images = sum(1 for x in out_repos if x.get("images"))
     cats = {}
-    for x in kept:
+    for x in out_repos:
         cats[x["category"]] = cats.get(x["category"], 0) + 1
-    print(f"Kept: {len(kept)}")
+    print(f"Kept: {len(out_repos)}")
     print(f"With images: {with_images}")
     print("By category:", json.dumps(cats, ensure_ascii=False))
 if __name__ == "__main__":
